@@ -39,7 +39,8 @@ function createParserConfigs({
   languagePlugin,
   include,
   exclude,
-  schema,
+  schema = '',
+  getSchema,
   extensions
 }) {
   const sourceModuleParser = (0, _RelaySourceModuleParser.default)(languagePlugin.findGraphQLTags);
@@ -53,14 +54,14 @@ function createParserConfigs({
       baseDir,
       getFileFilter: sourceModuleParser.getFileFilter,
       getParser: getParser || sourceModuleParser.getParser,
-      getSchemaSource: () => (0, _getSchemaSource.default)(schema),
+      getSchemaSource: getSchema || (() => (0, _getSchemaSource.default)(schema)),
       schemaExtensions,
       filepaths: (0, _getFilepathsFromGlob.default)(baseDir, fileOptions)
     },
     graphql: {
       baseDir,
       getParser: _relayCompiler.DotGraphQLParser.getParser,
-      getSchemaSource: () => (0, _getSchemaSource.default)(schema),
+      getSchemaSource: getSchema || (() => (0, _getSchemaSource.default)(schema)),
       schemaExtensions,
       filepaths: (0, _getFilepathsFromGlob.default)(baseDir, _objectSpread({}, fileOptions, {
         extensions: ['graphql']
@@ -83,12 +84,16 @@ class RelayCompilerWebpackPlugin {
       throw new Error('You must provide options to RelayCompilerWebpackPlugin.');
     }
 
-    if (!options.schema) {
+    if (!options.schema && !options.getSchema) {
       throw new Error('You must provide a Relay Schema.');
     }
 
     if (typeof options.schema === 'string' && !_fs.default.existsSync(options.schema)) {
       throw new Error(`Could not find the [schema] provided (${options.schema}).`);
+    }
+
+    if (options.getSchema && typeof options.getSchema !== 'function') {
+      throw new Error('The [getSchema] provided is not a function.');
     }
 
     if (!options.src) {
@@ -188,6 +193,7 @@ class RelayCompilerWebpackPlugin {
       include,
       exclude,
       schema: options.schema,
+      getSchema: options.getSchema,
       getParser: options.getParser,
       baseDir: options.src,
       extensions

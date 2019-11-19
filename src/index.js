@@ -23,6 +23,7 @@ const { schemaExtensions } = IRTransforms;
 type RelayCompilerWebpackPluginOptions = {
   schema: string,
   src: string,
+  getSchema?: Function,
   getParser?: Function,
   extensions: Array<string>,
   include: Array<string>,
@@ -30,8 +31,8 @@ type RelayCompilerWebpackPluginOptions = {
   languagePlugin?: () => PluginInterface,
   artifactDirectory?: string,
   getReporter?: (logger?: WebpackLogger) => any,
-  config: any
-}
+  config: any,
+};
 
 function createParserConfigs({
   baseDir,
@@ -40,17 +41,19 @@ function createParserConfigs({
   languagePlugin,
   include,
   exclude,
-  schema,
+  schema = '',
+  getSchema,
   extensions,
 }: {
   baseDir: string,
   getParser?: Function,
   sourceParserName: string,
   languagePlugin: PluginInterface,
-  schema: string,
+  schema?: string,
+  getSchema?: Function,
   include: Array<string>,
   exclude: Array<string>,
-  extensions: Array<string>
+  extensions: Array<string>,
 }) {
   const sourceModuleParser = RelaySourceModuleParser(
     languagePlugin.findGraphQLTags,
@@ -63,14 +66,14 @@ function createParserConfigs({
       baseDir,
       getFileFilter: sourceModuleParser.getFileFilter,
       getParser: getParser || sourceModuleParser.getParser,
-      getSchemaSource: () => getSchemaSource(schema),
+      getSchemaSource: getSchema || (() => getSchemaSource(schema)),
       schemaExtensions,
       filepaths: getFilepathsFromGlob(baseDir, fileOptions),
     },
     graphql: {
       baseDir,
       getParser: DotGraphQLParser.getParser,
-      getSchemaSource: () => getSchemaSource(schema),
+      getSchemaSource: getSchema || (() => getSchemaSource(schema)),
       schemaExtensions,
       filepaths: getFilepathsFromGlob(baseDir, {
         ...fileOptions,
@@ -81,22 +84,24 @@ function createParserConfigs({
 }
 
 class RelayCompilerWebpackPlugin {
-  parserConfigs: {}
+  parserConfigs: {};
 
-  writerConfigs: {}
+  writerConfigs: {};
 
-  languagePlugin: PluginInterface
+  languagePlugin: PluginInterface;
 
-  options: RelayCompilerWebpackPluginOptions
+  options: RelayCompilerWebpackPluginOptions;
 
-  static getHooks = getRelayCompilerPluginHooks
+  static getHooks = getRelayCompilerPluginHooks;
 
   constructor(options: RelayCompilerWebpackPluginOptions) {
     if (!options) {
-      throw new Error('You must provide options to RelayCompilerWebpackPlugin.');
+      throw new Error(
+        'You must provide options to RelayCompilerWebpackPlugin.',
+      );
     }
 
-    if (!options.schema) {
+    if (!options.schema && !options.getSchema) {
       throw new Error('You must provide a Relay Schema.');
     }
 
@@ -104,6 +109,10 @@ class RelayCompilerWebpackPlugin {
       throw new Error(
         `Could not find the [schema] provided (${options.schema}).`,
       );
+    }
+
+    if (options.getSchema && typeof options.getSchema !== 'function') {
+      throw new Error('The [getSchema] provided is not a function.');
     }
 
     if (!options.src) {
@@ -171,7 +180,8 @@ class RelayCompilerWebpackPlugin {
       skipPersist: true,
     });
 
-    return hooks.beforeWrite.promise()
+    return hooks.beforeWrite
+      .promise()
       .then(() => runner.compile(this.languagePlugin.outputExtension))
       .then((compileResult) => hooks.afterWrite.promise(compileResult));
   }
@@ -200,7 +210,10 @@ class RelayCompilerWebpackPlugin {
         result.request,
       );
 
-      if (this.options.artifactDirectory && !request.startsWith(this.options.artifactDirectory)) {
+      if (
+        this.options.artifactDirectory
+        && !request.startsWith(this.options.artifactDirectory)
+      ) {
         callback(null, result);
         return;
       }
@@ -217,7 +230,8 @@ class RelayCompilerWebpackPlugin {
 
   apply(compiler: Compiler) {
     const { options } = this;
-    const language = (options.languagePlugin || RelayLanguagePluginJavaScript)();
+    const language = (options.languagePlugin
+      || RelayLanguagePluginJavaScript)();
 
     const extensions = options.extensions !== undefined
       ? options.extensions
@@ -239,6 +253,7 @@ class RelayCompilerWebpackPlugin {
       include,
       exclude,
       schema: options.schema,
+      getSchema: options.getSchema,
       getParser: options.getParser,
       baseDir: options.src,
       extensions,
